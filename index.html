@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="en-us">
+
+<head>
+  <meta charset="utf-8" />
+  <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+  <meta name="viewport"
+    content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Web_build_test</title>
+  <link id="main-style" rel="stylesheet" href="External/style.css" />
+  <style>
+    body,
+    html {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+    }
+
+    .main-content {
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+    }
+
+    .webgl {
+      flex: 1;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      position: relative;
+    }
+
+    #unity-canvas {
+      width: 100%;
+      height: 100%;
+    }
+
+    #loader {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      background: rgba(255, 255, 255, 0.8);
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      column-gap: 10px;
+      align-items: center;
+      z-index: 9999;
+      font-size: 24px;
+      color: #333;
+      font-family: Arial, sans-serif;
+    }
+
+    .spinner {
+      border: 8px solid rgba(0, 0, 0, 0.1); /* Light grey */
+      border-radius: 50%;
+      border-top: 8px solid #333; /* Darker color */
+      width: 50px;
+      margin-bottom: 10px;
+      height: 50px;
+      animation: spin 1s linear infinite;
+    }
+
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+
+
+/* Safari */
+@-webkit-keyframes spin {
+  0% { -webkit-transform: rotate(0deg); }
+  100% { -webkit-transform: rotate(360deg); }
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+ 
+    /* Force orientation background styles */
+    .forceOrientationBackground {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      background: rgba(0, 0, 0, 0.8);
+      z-index: 9999;
+      display: none;
+    }
+
+    .forceOrientationBackground img {
+      width: 50%;
+      height: auto;
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+    }
+  </style>
+</head>
+
+<body>
+  <!--Nav bar-->
+  <div id="loader">
+    <div class="spinner"></div>
+    <span>Loading...</span>
+  </div>
+  <!-- <div id="top-container"></div> -->
+  
+  <div class="main-content">
+    <div class="webgl">
+      <div id="unityContainer">
+        <canvas id="unity-canvas"></canvas>
+      </div>
+      <div id="forceOrientationBackground" class="forceOrientationBackground">
+        <img id="forceOrientationImg" />
+      </div>
+    </div>
+    <!-- Band below Webgl content -->
+    <div id="bottom-container"></div>
+  </div>
+
+  <script>
+    function applyPortraitStyles() {
+      const portraitCSS = document.createElement("style");
+      portraitCSS.innerHTML = `
+        @media screen and (orientation: portrait) {
+          #unity-canvas {
+            width: 100% !important;
+            height: 100% !important;
+          }
+        }
+        @media only screen and (max-width: 767px) and (orientation: landscape),
+        @media only screen and (min-width: 1440px) and (orientation: landscape) {
+          #unity-canvas {
+            width: 99% !important;
+            height: 99% !important;
+          }
+        }
+             @media screen and (orientation: landscape) {
+      #unity-canvas {
+        max-width: 99.7vw;
+        max-height: 100vh;
+      }
+    }
+      @media screen and (orientation: portrait) {
+    #unity-canvas {
+        max-width: 99.7vw;
+        max-height: 100vh;
+    }
+}
+
+      `;
+      document.head.appendChild(portraitCSS);
+      console.log("Portrait styles applied");
+    }
+
+    function toggleHamburger(obj) {
+      const containerElement = obj.parentElement.parentElement;
+      containerElement.classList.toggle("change");
+    }
+
+    const forceLandscapeIcon = "External/landscape.svg";
+    const forcePortraitIcon = "External/portrait.svg";
+    const isChromeIos = /CriOS/i.test(navigator.userAgent) && /iphone|ipod|ipad/i.test(navigator.userAgent);
+
+    let forceOrientationImg;
+    let portraitMode;
+    let isMobile = /Android|webOS|iphone|ipad|ipod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+    let isInFirstScreen = false;
+    let deviceOrientation = "";
+    let isForcedToRotate = false;
+
+    try {
+      portraitMode = !!JSON.parse("");
+    } catch (e) {
+      portraitMode = false;
+    }
+
+    const buildUrl = "Build";
+    const loaderUrl = buildUrl + "/build today.loader.js";
+    const config = {
+      dataUrl: buildUrl + "/build today.data",
+      frameworkUrl: buildUrl + "/build today.framework.js",
+      codeUrl: buildUrl + "/build today.wasm",
+      streamingAssetsUrl: "StreamingAssets",
+      companyName: "Codistan Ventures",
+      productName: "Web_build_test",
+      productVersion: "0.1",
+    };
+
+    const container = document.querySelector("#unityContainer");
+    const canvas = document.querySelector("#unity-canvas");
+
+    let unityInstance = null;
+    const script = document.createElement("script");
+    script.src = loaderUrl;
+    script.onload = () => {
+      createUnityInstance(canvas, config, UnityLoadProgress)
+        .then((uI) => {
+          unityInstance = uI;
+        })
+        .catch((message) => {
+          alert(message);
+        });
+    };
+
+    document.body.appendChild(script);
+
+    function OnUnload() {
+      if (unityInstance) {
+        unityInstance.SendMessage("_BrowserControls", "BrowserUnloaded");
+      }
+    }
+
+    window.onload = () => {
+      forceOrientationImg = document.getElementById("forceOrientationImg");
+
+      window.addEventListener("resize", () => {
+        Resize();
+        detectDeviceOrientation();
+      });
+
+      detectDeviceOrientation();
+      defaultGameMode();
+    };
+
+    function OnAppLoaded() {
+      applyPortraitStyles();
+
+      document.getElementById("unityContainer")
+        .addEventListener("mouseenter", () => {
+          unityInstance.SendMessage("_BrowserControls", "MouseEntered");
+        });
+
+      document.getElementById("unityContainer")
+        .addEventListener("mouseleave", () => {
+          unityInstance.SendMessage("_BrowserControls", "MouseLeft");
+        });
+        
+    }
+
+    function UnityLoadProgress(progress) {
+      if (progress == 1) {
+        console.log("WEBGL LOADED SUCCESSFULLY..");
+        document.getElementById("loader").style.display = "none";
+
+        setTimeout(() => {
+          unityInstance.SendMessage("_BrowserControls", "BrowserLoaded");
+          Resize();
+          
+          OnAppLoaded();
+        }, 1500);
+      }
+    }
+
+    function Resize() {
+      const width = window.innerWidth;
+      const height = window.innerHeight;
+      const sizeObj = { height: height, width: width };
+
+      const canvas = document.getElementById("unity-canvas");
+
+      canvas.width = width;
+      canvas.height = height;
+
+      try {
+        unityInstance.SendMessage("Main Camera", "LoadBrowserVariables", JSON.stringify(sizeObj));
+      } catch {
+        console.log("Main camera not found, maybe not a demo build");
+      }
+      hideObsoleteButtons();
+    }
+
+    window.addEventListener("beforeunload", function (e) {
+      OnUnload();
+      console.log("Page unloaded");
+    });
+
+    function defaultGameMode() {
+      if (!isMobile && portraitMode) {
+        dynamicPageLoading("External/normal_screen_bottom.html", pageSelector, false);
+        dynamicPageLoading("External/normal_screen_top.html", pageSelector, true);
+        manageBottomContent();
+        isInFirstScreen = true;
+      } else {
+        dynamicPageLoading("External/semi-fullscreen.html", pageSelector, true);
+        document.getElementById("main-style").setAttribute("href", "External/semi-fullscreen_style.css");
+        clearBottomContent();
+        isInFirstScreen = false;
+        manageBottomContent();
+      }
+    }
+
+    function dynamicPageLoading(url, callback, top) {
+      var xhr = new XMLHttpRequest();
+      xhr.onreadystatechange = function () {
+        if (this.readyState == 4 && this.status == 200) {
+          callback(this, top);
+        }
+      };
+      xhr.open("get", url, true);
+      xhr.send();
+    }
+
+    function pageSelector(response, top) {
+      let topContainer = document.getElementById("top-container");
+      let bottomContainer = document.getElementById("bottom-container");
+      setTimeout(() => {
+        Resize();
+      }, 1);
+      if (top) {
+        topContainer.innerHTML = response.responseText;
+      } else {
+        bottomContainer.innerHTML = response.responseText;
+      }
+    }
+
+    function clearTopContent() {
+      var topContainer = document.getElementById("top-container");
+      topContainer.innerHTML = "";
+    }
+
+    function clearBottomContent() {
+      var bottomContainer = document.getElementById("bottom-container");
+      bottomContainer.innerHTML = "";
+    }
+
+    function manageBottomContent() {
+      const bottomContainer = document.getElementById("bottom-container");
+      if (isInFirstScreen) {
+        bottomContainer.style.display = "block";
+      } else {
+        bottomContainer.style.display = "none";
+      }
+      backgroundOnMobilePortrait();
+      attachToUnityCanvas();
+    }
+
+    function detectDeviceOrientation() {
+      if (!isChromeIos) {
+        deviceOrientation = window.orientation ? "landscape" : "portrait";
+      } else {
+        deviceOrientation = window.innerHeight > window.innerWidth ? "portrait" : "landscape";
+      }
+      hideMenu();
+      backgroundOnMobilePortrait();
+    }
+
+    function backgroundOnMobilePortrait() {
+      if (!isMobile) return;
+      let bodyMobile = document.body;
+      const originalColor = bodyMobile.style.backgroundColor;
+      if (isForcedToRotate || !isInFirstScreen)
+        bodyMobile.style.backgroundColor = "rgb(35, 31, 32)";
+      else {
+        bodyMobile.style.backgroundColor = "white";
+      }
+    }
+
+    // function forceOrientation() {
+    //   if (!isMobile) return;
+    //   let shouldForceOrient = shouldForceOrientation();
+    //   let forceOrientationBackground = document.getElementById(
+    //     "forceOrientationBackground"
+    //   );
+    //   if (shouldForceOrient) {
+    //     document.body.style.overflow = "hidden";
+    //     isForcedToRotate = true;
+    //     forceOrientationBackground.style.display = "block";
+    //     if (deviceOrientation == "portrait") {
+    //       forceOrentationImg.setAttribute("src", forceLandscapeIcon);
+    //       forceOrentationImg.className = "forceLandscape";
+    //     } else {
+    //       forceOrentationImg.setAttribute("src", forcePortraitIcon);
+    //       forceOrentationImg.className = "forcePortrait";
+    //     }
+    //   } else {
+    //     document.body.style.overflow = "visible";
+    //     isForcedToRotate = false;
+    //     forceOrientationBackground.style.display = "none";
+    //   }
+    // }
+
+    function shouldForceOrientation() {
+      return (portraitMode && deviceOrientation == "landscape") ||
+        (!portraitMode && deviceOrientation == "portrait")
+        ? true
+        : false;
+    }
+
+    function attachToUnityCanvas() {
+      var styleEl = document.createElement("style");
+      styleEl.innerHTML = `
+          canvas { 
+            pointer-events: auto; 
+          }
+        `;
+      document.head.appendChild(styleEl);
+    }
+
+    function hideMenu() {
+      const hamburgerContainer = document.querySelector(
+        ".hamburger-container"
+      );
+      if (!hamburgerContainer) return;
+      let bottom = isInFirstScreen ? "bottom" : "top";
+      if (isForcedToRotate) hamburgerContainer.classList.add("hide");
+      else hamburgerContainer.classList.remove("hide");
+    }
+
+    function hideObsoleteButtons() {
+      if (!isMobile) return;
+      let btnArray = document.getElementsByTagName("button");
+      for (let btn of btnArray) {
+        btn.style.pointerEvents = "none";
+      }
+    }
+  </script>
+</body>
+
+</html>
